@@ -15,27 +15,22 @@ from utils.functionlty import bot_func, create_bot_for_selected_bot, extract_pdf
 import torchvision.transforms as transforms
 from huggingface_hub import hf_hub_download
 
-# إنشاء مجلد النماذج إذا لم يكن موجوداً
 os.makedirs("models", exist_ok=True)
 
 app = FastAPI()
 
-# تحميل النماذج من HuggingFace
 stroke_model_path = hf_hub_download(repo_id="abdallateef/test", filename="prediction_model.joblib")
 detection_model_path = hf_hub_download(repo_id="abdallateef/test", filename="detection_model.h5")
 srgan_model_path = hf_hub_download(repo_id="abdallateef/test", filename="srgan_model.pth")
 denoising_model_path = hf_hub_download(repo_id="abdallateef/test", filename="denoising_model.pth")
 cyclegan_model_path = hf_hub_download(repo_id="abdallateef/test", filename="cyclegan_model.pth")
 
-# تحميل نموذج التنبؤ بالسكتة الدماغية
 stroke_model = joblib.load(stroke_model_path)
 feature_names = stroke_model.feature_names_in_
 print("Model features:", feature_names)
 
-# تحميل نموذج كشف الصور
 image_model = load_model(detection_model_path)
 
-# إنشاء الكائن الخاص بالـ Bot
 bot = create_bot_for_selected_bot(
     embeddings="BAAI/bge-base-en-v1.5",
     vdb_dir="Stroke_vdb",
@@ -43,7 +38,6 @@ bot = create_bot_for_selected_bot(
     name="stroke RAG"
 )
 
-# --- تعريف دوال إنشاء النماذج الخاصة بمعالجة الصور ---
 def create_srgan_generator():
     model = nn.Sequential(
         nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
@@ -67,7 +61,6 @@ def create_cyclegan_generator():
         nn.Conv2d(64, 3, kernel_size=3, padding=1)
     )
 
-# --- تعريف موديلات البيانات ---
 class StrokePredictionInput(BaseModel):
     age: int
     hypertension: int
