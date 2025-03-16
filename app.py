@@ -1,25 +1,41 @@
+import os
 import pandas as pd
 import joblib
+import torch
+import torch.nn as nn
+import io
 from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
 from PIL import Image
 import numpy as np
-import io
 from keras.models import load_model
 from uuid import uuid4
 from utils.functionlty import bot_func, create_bot_for_selected_bot, extract_pdf_text, analysis_text
 import torchvision.transforms as transforms
-import torch
-import torch.nn as nn
+from huggingface_hub import hf_hub_download
 
+# إنشاء مجلد النماذج إذا لم يكن موجوداً
+os.makedirs("models", exist_ok=True)
 
-stroke_model = joblib.load(r"D:/FastAPI/models/prediction_model.joblib")
-feature_names = stroke_model.feature_names_in_  # ميزات النموذج
-print("Model features:", feature_names)  # Debug print
+app = FastAPI()
 
-image_model = load_model("D:/FastAPI/models/detection_model.h5")
+# تحميل النماذج من HuggingFace
+stroke_model_path = hf_hub_download(repo_id="abdallateef/test", filename="prediction_model.joblib")
+detection_model_path = hf_hub_download(repo_id="abdallateef/test", filename="detection_model.h5")
+srgan_model_path = hf_hub_download(repo_id="abdallateef/test", filename="srgan_model.pth")
+denoising_model_path = hf_hub_download(repo_id="abdallateef/test", filename="denoising_model.pth")
+cyclegan_model_path = hf_hub_download(repo_id="abdallateef/test", filename="cyclegan_model.pth")
 
+# تحميل نموذج التنبؤ بالسكتة الدماغية
+stroke_model = joblib.load(stroke_model_path)
+feature_names = stroke_model.feature_names_in_
+print("Model features:", feature_names)
+
+# تحميل نموذج كشف الصور
+image_model = load_model(detection_model_path)
+
+# إنشاء الكائن الخاص بالـ Bot
 bot = create_bot_for_selected_bot(
     embeddings="BAAI/bge-base-en-v1.5",
     vdb_dir="Stroke_vdb",
@@ -27,9 +43,7 @@ bot = create_bot_for_selected_bot(
     name="stroke RAG"
 )
 
-app = FastAPI()
-
-#----
+# --- تعريف دوال إنشاء النماذج الخاصة بمعالجة الصور ---
 def create_srgan_generator():
     model = nn.Sequential(
         nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
@@ -53,7 +67,7 @@ def create_cyclegan_generator():
         nn.Conv2d(64, 3, kernel_size=3, padding=1)
     )
 
-#----
+# --- تعريف موديلات البيانات ---
 class StrokePredictionInput(BaseModel):
     age: int
     hypertension: int
@@ -80,21 +94,17 @@ def preprocess_input(data: StrokePredictionInput):
         'smoking_status_Unknown', 'smoking_status_formerly smoked',
         'smoking_status_never smoked', 'smoking_status_smokes'
     ]
-
     df = pd.DataFrame(0, index=[0], columns=columns)
-
     df['age'] = data.age
     df['hypertension'] = data.hypertension
     df['heart_disease'] = data.heart_disease
     df['avg_glucose_level'] = data.avg_glucose_level
     df['bmi'] = data.bmi
-
     df[f'gender_{data.gender}'] = 1
     df[f'ever_married_{data.ever_married}'] = 1
     df[f'work_type_{data.work_type}'] = 1
     df[f'Residence_type_{data.residence_type}'] = 1
     df[f'smoking_status_{data.smoking_status}'] = 1
-
     df = df[feature_names]
     return df
 
@@ -104,12 +114,7 @@ async def predict_stroke(data: StrokePredictionInput):
         input_df = preprocess_input(data)
         prediction = stroke_model.predict(input_df)
         probability = stroke_model.predict_proba(input_df)[0][1]
-
-
-        return {
-            "prediction": int(prediction[0]),
-            "probability": float(probability)
-        }
+        return {"prediction": int(prediction[0]), "probability": float(probability)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -120,19 +125,16 @@ async def predict_image(file: UploadFile = File(...)):
         image = Image.open(io.BytesIO(contents)).resize((224, 224)).convert("RGB")
         image = np.array(image) / 255.0
         image = image.reshape((1, 224, 224, 3))
-        
         pred = image_model.predict(image)
         pred_label = 1 if pred >= 0.50 else 0
         classes = ['Normal', 'Stroke']
-
         return {"prediction": classes[pred_label]}
-    
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/chat/")
 async def chat(request: ChatRequest):
-    session_id = str(uuid4())  
+    session_id = str(uuid4())
     response = "".join(bot_func(bot, request.user_input, session_id=session_id))
     return {"response": response}
 
@@ -140,55 +142,38 @@ async def chat(request: ChatRequest):
 async def upload_pdf(file: UploadFile = File(...)):
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF files are allowed!")
-
     text = extract_pdf_text(file.file)
     analysis = analysis_text(text)
+    return {"filename": file.filename, "extracted_text": text, "analysis": analysis}
 
-    return {
-        "filename": file.filename,
-        "extracted_text": text,
-        "analysis": analysis
-    }
-
-#---
-
-# نقطة نهاية SRGAN بدون حفظ الصورة على القرص
 @app.post("/predict/srgan/")
 async def predict_srgan(file: UploadFile = File(...)):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = create_srgan_generator().to(device)
-    model.load_state_dict(torch.load("models/srgan_model.pth", map_location=device))
+    model.load_state_dict(torch.load(srgan_model_path, map_location=device))
     model.eval()
-    
     image = Image.open(file.file).convert('RGB')
     transform = transforms.ToTensor()
     image_tensor = transform(image).unsqueeze(0).to(device)
-    
     with torch.no_grad():
         output = model(image_tensor)
-        
     output_image = transforms.ToPILImage()(output.squeeze(0).cpu())
     buf = io.BytesIO()
     output_image.save(buf, format="PNG")
     buf.seek(0)
     return Response(content=buf.getvalue(), media_type="image/png")
 
-
 @app.post("/predict/denoising/")
 async def predict_denoising(file: UploadFile = File(...)):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # تحميل النموذج كاملاً مع الأوزان
-    model = torch.load("models/denoising_model.pth", map_location=device, weights_only=False)
+    model = torch.load(denoising_model_path, map_location=device, weights_only=False)
     model.to(device)
     model.eval()
-    
     image = Image.open(file.file).convert('RGB')
     transform = transforms.ToTensor()
     image_tensor = transform(image).unsqueeze(0).to(device)
-    
     with torch.no_grad():
         output = model(image_tensor)
-        
     output_image = transforms.ToPILImage()(output.squeeze(0).cpu())
     buf = io.BytesIO()
     output_image.save(buf, format="PNG")
@@ -198,26 +183,20 @@ async def predict_denoising(file: UploadFile = File(...)):
 @app.post("/predict/cyclegan/")
 async def predict_cyclegan(file: UploadFile = File(...)):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = torch.load("models/cyclegan_model.pth", map_location=device, weights_only=False)
+    model = torch.load(cyclegan_model_path, map_location=device, weights_only=False)
     model.to(device)
     model.eval()
-    
     image = Image.open(file.file).convert('RGB')
     transform = transforms.ToTensor()
     image_tensor = transform(image).unsqueeze(0).to(device)
-    
     with torch.no_grad():
         output = model(image_tensor)
-        
     output_image = transforms.ToPILImage()(output.squeeze(0).cpu())
     buf = io.BytesIO()
     output_image.save(buf, format="PNG")
     buf.seek(0)
     return Response(content=buf.getvalue(), media_type="image/png")
 
-
-#---
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
