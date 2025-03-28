@@ -11,10 +11,12 @@ from langchain_community.chat_message_histories import StreamlitChatMessageHisto
 import PyPDF2
 from langchain_together import ChatTogether
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from pathlib import Path
+from io import BytesIO
 
 
 msgs = StreamlitChatMessageHistory(key="special_app_key")
-llm = ChatTogether(model="meta-llama/Llama-3.3-70B-Instruct-Turbo",temperature=0.0, api_key="a0150ce38821b43f8333015f810d8bc98060c62c33f54494fd30e82dc2bc6c7f")
+llm = ChatTogether(model="meta-llama/Llama-3.3-70B-Instruct-Turbo", temperature=0.0, api_key="3dfa2e31d4d2d1e7c7751a34ccad57a494bd4bca8e045164832cd900a75f49ba")
 
 
 
@@ -71,8 +73,9 @@ def create_conversational_rag_chain(sys_prompt_dir, vdb_dir, llm, embeddings_nam
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
     return rag_chain
 
-def extract_pdf_text(file_object):
-    reader = PyPDF2.PdfReader(file_object)
+def extract_pdf_text(file_content: bytes) -> str:
+    """Extract text from PDF bytes."""
+    reader = PyPDF2.PdfReader(file_content)
     text = ""
     for page_num in range(len(reader.pages)):
         page = reader.pages[page_num]
@@ -119,12 +122,13 @@ def analysis_text(text: str):
     """
     return detailed_prompt
 
+
 def bot_func(rag_chain, user_input, session_id):
     for chunk in rag_chain.stream(
         {"input": user_input}, config={"configurable": {"session_id": session_id}}
     ):
         if answer_chunk := chunk.get("answer"):
-            yield answer_chunk
+            yield answer_chunk    
 
 def create_bot_for_selected_bot(name, embeddings, vdb_dir, sys_prompt_dir):
     """Create a bot for the selected configuration."""
@@ -141,4 +145,3 @@ def create_bot_for_selected_bot(name, embeddings, vdb_dir, sys_prompt_dir):
         top_n=5
     )
     return conversational_rag_chain
-
