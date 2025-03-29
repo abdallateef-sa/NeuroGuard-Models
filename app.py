@@ -33,15 +33,8 @@ cyclegan_model_path = hf_hub_download(repo_id="abdallateef/test", filename="cycl
 stroke_model = joblib.load(stroke_model_path)
 feature_names = stroke_model.feature_names_in_
 print("Model features:", feature_names)
-
+## Image models
 image_model = load_model(detection_model_path)
-
-bot = create_bot_for_selected_bot(
-    embeddings="BAAI/bge-base-en-v1.5",
-    vdb_dir="Stroke_vdb",
-    sys_prompt_dir="assist/prompt.txt",
-    name="stroke RAG"
-)
 
 def create_srgan_generator():
     model = nn.Sequential(
@@ -66,56 +59,6 @@ def create_cyclegan_generator():
         nn.Conv2d(64, 3, kernel_size=3, padding=1)
     )
 
-class StrokePredictionInput(BaseModel):
-    age: int
-    hypertension: int
-    heart_disease: int
-    avg_glucose_level: float
-    bmi: float
-    gender: str
-    ever_married: str
-    work_type: str
-    residence_type: str
-    smoking_status: str
-
-class ChatRequest(BaseModel):
-    user_input: str
-
-def preprocess_input(data: StrokePredictionInput):
-    columns = [
-        'age', 'hypertension', 'heart_disease', 'avg_glucose_level', 'bmi',
-        'gender_Female', 'gender_Male', 'gender_Other',
-        'ever_married_No', 'ever_married_Yes',
-        'work_type_Govt_job', 'work_type_Never_worked', 'work_type_Private',
-        'work_type_Self-employed', 'work_type_children',
-        'Residence_type_Rural', 'Residence_type_Urban',
-        'smoking_status_Unknown', 'smoking_status_formerly smoked',
-        'smoking_status_never smoked', 'smoking_status_smokes'
-    ]
-    df = pd.DataFrame(0, index=[0], columns=columns)
-    df['age'] = data.age
-    df['hypertension'] = data.hypertension
-    df['heart_disease'] = data.heart_disease
-    df['avg_glucose_level'] = data.avg_glucose_level
-    df['bmi'] = data.bmi
-    df[f'gender_{data.gender}'] = 1
-    df[f'ever_married_{data.ever_married}'] = 1
-    df[f'work_type_{data.work_type}'] = 1
-    df[f'Residence_type_{data.residence_type}'] = 1
-    df[f'smoking_status_{data.smoking_status}'] = 1
-    df = df[feature_names]
-    return df
-
-@app.post("/predict/")
-async def predict_stroke(data: StrokePredictionInput):
-    try:
-        input_df = preprocess_input(data)
-        prediction = stroke_model.predict(input_df)
-        probability = stroke_model.predict_proba(input_df)[0][1]
-        return {"prediction": int(prediction[0]), "probability": float(probability)}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
 @app.post("/upload-image/")
 async def predict_image(file: UploadFile = File(...)):
     try:
@@ -131,9 +74,7 @@ async def predict_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-
-app = FastAPI(title="RAG Chat Application")
-
+## Chat Bot API
 class ChatRequest(BaseModel):
     input: str
     session_id: str
@@ -268,6 +209,96 @@ async def predict_cyclegan(file: UploadFile = File(...)):
     buf.seek(0)
     return Response(content=buf.getvalue(), media_type="image/png")
 
+
+
+
+# Initialize the FastAPI app
+
+# Load the pre-trained model (assumed to be saved as 'model.pkl')
+model = joblib.load('stroke_prediction_pipeline_optimized.joblib')
+
+# Define the input data structure using Pydantic
+class PatientData(BaseModel):
+    gender: str            # 'Male', 'Female'
+    age: float             # e.g., 67, 0.64
+    hypertension: int      # 0 or 1
+    heart_disease: int     # 0 or 1
+    ever_married: str      # 'Yes', 'No'
+    work_type: str         # 'Private', 'Self-employed', 'Govt_job', 'children'
+    Residence_type: str    # 'Urban', 'Rural'
+    avg_glucose_level: float  # e.g., 228.69
+    bmi: float             # e.g., 36.6
+    smoking_status: str    # 'formerly smoked', 'never smoked', 'smokes', 'Unknown'
+
+# Prediction endpoint
+@app.post("/predict")
+def predict(data: PatientData):
+    # Extract input values
+    gender = data.gender
+    age = data.age
+    hypertension = data.hypertension
+    heart_disease = data.heart_disease
+    ever_married = data.ever_married
+    work_type = data.work_type
+    residence_type = data.Residence_type
+    avg_glucose_level = data.avg_glucose_level
+    bmi = data.bmi
+    smoking_status = data.smoking_status
+
+    # Encode categorical variables to match model features
+    gender_male = 1 if gender == 'Male' else 0
+    ever_married_yes = 1 if ever_married == 'Yes' else 0
+    residence_type_urban = 1 if residence_type == 'Urban' else 0
+    
+    # One-hot encode work_type (reference category: 'Govt_job')
+    work_type_private = 1 if work_type == 'Private' else 0
+    work_type_self_employed = 1 if work_type == 'Self-employed' else 0
+    work_type_children = 1 if work_type == 'children' else 0
+    
+    # One-hot encode smoking_status (reference category: 'Unknown')
+    smoking_status_formerly_smoked = 1 if smoking_status == 'formerly smoked' else 0
+    smoking_status_never_smoked = 1 if smoking_status == 'never smoked' else 0
+    smoking_status_smokes = 1 if smoking_status == 'smokes' else 0
+
+    # Create feature array in the order expected by the model
+    features = [
+        age,
+        hypertension,
+        heart_disease,
+        avg_glucose_level,
+        bmi,
+        gender_male,
+        ever_married_yes,
+        work_type_private,
+        work_type_self_employed,
+        work_type_children,
+        residence_type_urban,
+        smoking_status_formerly_smoked,
+        smoking_status_never_smoked,
+        smoking_status_smokes
+    ]
+
+    # Convert to 2D array for model prediction
+    input_data = np.array([features])
+    
+    # Make prediction
+    probabilities = model.predict_proba(input_data)[0]
+    
+    # Return the result as a JSON response
+    stroke_prob = round(probabilities[1] * 100, 1)
+    return {
+        "stroke_probability": stroke_prob
+    }
+# Welcome endpoint
+@app.get("/")
+def read_root():
+    return {"message": "Stroke Prediction API"}
+
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+    
