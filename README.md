@@ -29,11 +29,6 @@ Use this README to set up, run, and test all API endpoints (e.g. via Postman).
 git clone https://github.com/abdallateef-sa/NeuroGuard-Models.git
 cd NeuroGuard-Models
 
-# (Optional) create a virtual environment
-python3 -m venv venv
-source venv/bin/activate    # macOS/Linux
-venv\Scripts\activate.bat   # Windows
-
 # Install Python dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -47,8 +42,7 @@ pip install -r requirements.txt
 uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
-- **Swagger UI** available at: `http://localhost:8000/docs`  
-- **ReDoc** available at: `http://localhost:8000/redoc`  
+- **Swagger UI** available at: `http://localhost:8000/docs`   
 
 ---
 
@@ -186,6 +180,4 @@ uvicorn app:app --reload --host 0.0.0.0 --port 8000
    - `GET /chat_history?session_id=...`  
 5. **Stroke prediction & image endpoints**  
    - Use their respective `POST` endpoints with JSON or form-data.  
-
----
 
