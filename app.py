@@ -24,7 +24,7 @@ os.makedirs("models", exist_ok=True)
 
 app = FastAPI()
 
-stroke_model_path = hf_hub_download(repo_id="abdallateef/test", filename="prediction_model.joblib")
+stroke_model_path = hf_hub_download(repo_id="abdallateef/test", filename="stroke_prediction_pipeline_optimized.joblib")
 detection_model_path = hf_hub_download(repo_id="abdallateef/test", filename="detection_model.h5")
 srgan_model_path = hf_hub_download(repo_id="abdallateef/test", filename="srgan_model.pth")
 denoising_model_path = hf_hub_download(repo_id="abdallateef/test", filename="denoising_model.pth")
@@ -131,8 +131,6 @@ async def predict_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-
-app = FastAPI(title="RAG Chat Application")
 
 class ChatRequest(BaseModel):
     input: str
