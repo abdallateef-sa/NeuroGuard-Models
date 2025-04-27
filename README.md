@@ -1,95 +1,183 @@
-# RAG Chat Application README
-This is a FastAPI-based RAG (Retrieval-Augmented Generation) Chat Application that supports streaming chat responses, PDF uploads for text extraction and analysis, and chat history retrieval. This README provides instructions on how to set up and test the API using Postman.
+# NeuroGuard-Models README
+
+This is a FastAPI-based application that combines:
+
+- **RAG Chat** (Retrieval-Augmented Generation) with streaming responses  
+- **PDF Upload & Analysis**  
+- **Chat History** retrieval  
+- **Stroke Prediction** via a pre-trained ML pipeline  
+- **Image Classification** (“Normal” vs. “Stroke”)  
+- **Super-Resolution** (SRGAN)  
+- **Denoising**  
+- **Style-Transfer** (CycleGAN)  
+
+Use this README to set up, run, and test all API endpoints (e.g. via Postman).
+
+---
 
 ## Prerequisites
-1. **Python 3.8+:** Ensure Python is installed on your system.
-2. **Dependencies:** Install the required Python packages by running:
-```bash
 
-pip install fastapi uvicorn pydantic asyncio typing
-```
-(Note: Additional dependencies like `utils.functionlty` are assumed to be custom modules. Ensure they are available in your project.)
-3. **Postman:** Install Postman to test the API endpoints.
-4. **Run the Server:** Start the FastAPI server with:
+1. **Python 3.8+**  
+2. **Git** (to clone the repo)  
+3. **Postman** (or any HTTP client) for testing  
+
+---
+
+## Installation
+
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+git clone https://github.com/abdallateef-sa/NeuroGuard-Models.git
+cd NeuroGuard-Models
+
+# Install Python dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
 ```
-Replace `main` with the filename containing the code (e.g., `app.py`).
-The server will be available at `http://localhost:8000`.
+
+---
+
+## Running the Server
+
+```bash
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
+```
+
+- **Swagger UI** available at: `http://localhost:8000/docs`   
+
+---
 
 ## API Endpoints
-The application exposes three main endpoints:
 
-1. **POST /chat/stream:** Stream chat responses based on user input.
-2. **POST /pdf/upload:** Upload a PDF file and store its analyzed text for a session.
-3. **GET /chat_history:** Retrieve the chat history for a specific session.
-Below are detailed instructions for testing each endpoint in Postman.
+### 1. Stream Chat (RAG)
+
+- **URL**: `POST /chat/stream`  
+- **Body (JSON)**  
+  ```json
+  {
+    "input": "Hello, how can you assist me?",
+    "session_id": "session_123"
+  }
+  ```
+- **Response**: Server-Sent Events stream (`text/event-stream`)  
+- **Notes**:  
+  - Use Postman’s “Event Stream” view or `curl -N` to follow the stream.  
+  - Maintains history per `session_id`.  
+
 ---
-1. ### POST /chat/stream
-**Description:** Streams a chat response based on user input and session ID. Supports text input and optional pre-uploaded PDF text.
 
-- **URL:** `http://localhost:8000/chat/stream`
-- **Method:** `POST`
-- **Body** (raw JSON):
-```json
-{
-  "input": "Hello, how can you assist me today?",
-  "session_id": "test_session_123"
-}
-```
-- **Response:** A stream of text in Server-Sent Events (SSE) format.
-    - Example: `data: Hello! I'm here to assist you. How can I help?\n\n`
-- Notes:
-    - Use Postman’s “SSE” feature or a tool like `curl` to observe the streaming response.
-    - The `session_id` is required to track the conversation.
-2. ## POST /pdf/upload
-**Description:** Uploads a PDF file, extracts its text, analyzes it, and stores it for use in the chat session.
+### 2. Upload & Analyze PDF
 
-- **URL:** `http://localhost:8000/pdf/upload`
-- **Method:** `POST`
-- **Body** (form-data):
-    - Key: `session_id` | Value: `test_session_123` (type: text)
-    - Key: `file` | Value: (select a `.pdf` file) (type: file)
-- **Response** (JSON):
-```json
-{
-  "status": "success",
-  "message": "PDF Uploaded successfully",
-  "analysis": "Extracted and analyzed text from the PDF"
-}
-```
-- Notes:
-    - The uploaded PDF’s analyzed text is stored temporarily and appended to the next `/chat/stream` request for the same `session_id`.
-    - Only PDF files are accepted (`application/pdf`).
-3. ## GET /chat_history
-**Description:**Retrieves the chat history for a specific session.
+- **URL**: `POST /pdf/upload`  
+- **Body (form-data)**  
+  - `session_id`: _string_  
+  - `file`: _application/pdf_  
+- **Response (JSON)**  
+  ```json
+  {
+    "status": "success",
+    "message": "PDF Uploaded successfully",
+    "analysis": "<extracted and summarized text>"
+  }
+  ```
+- **Notes**:  
+  - The extracted text is auto-appended to the next `/chat/stream` call for that session.  
 
-- **URL**: `http://localhost:8000/chat_history`
-- **Method**: `GET`
-- **Headers:** None required
-- **Body** (form-data)
-    - Key: `session_id` | Value: `test_session_123` (type: text)
+---
 
-- **Response** (JSON):
-```json
-{
-  "chat_history": [
-    {"sender": "user", "message": "Hello, how can you assist me today?"},
-    {"sender": "assistant", "message": "Hello! I'm here to assist you. How can I help?"}
-  ]
-}
-```
-- **Notes:**
-    - Returns a 404 error if the   `session_id` does not exist.
-## Testing Workflow in Postman
-1. **Start a Session with Chat:**
-    - Send a POST request to `/chat/stream` with a unique `session_id` and an initial message.
-    - Observe the streamed response in Postman.
-2. **Upload a PDF:**
-    - Send a POST request to `/pdf/upload` with the same `session_id` and a PDF file.
-    - Check the response for the analyzed text.
-3. **Chat with PDF Context:**
-    - Send another POST request to `/chat/stream` with the same `session_id`.
-    - The input will include the analyzed PDF text automatically.
-4. **Retrieve Chat History:**
-    - Send a GET request to `/chat_history` with the `session_id` to see the full conversation.
+### 3. Get Chat History
+
+- **URL**: `GET /chat_history`  
+- **Query/form-data**:  
+  - `session_id`: _string_  
+- **Response (JSON)**  
+  ```json
+  {
+    "chat_history": [
+      { "sender": "user",      "message": "Hi" },
+      { "sender": "assistant", "message": "Hello!" }
+    ]
+  }
+  ```
+- **Error**: `404` if `session_id` not found.  
+
+---
+
+### 4. Stroke Prediction
+
+- **URL**: `POST /predict`  
+- **Body (JSON)** _(Pydantic `PatientData` model)_  
+  ```json
+  {
+    "gender": "Male",
+    "age": 67,
+    "hypertension": 0,
+    "heart_disease": 1,
+    "ever_married": "Yes",
+    "work_type": "Private",
+    "Residence_type": "Urban",
+    "avg_glucose_level": 228.69,
+    "bmi": 36.6,
+    "smoking_status": "never smoked"
+  }
+  ```
+- **Response (JSON)**  
+  ```json
+  { "stroke_probability": 23.7 }
+  ```
+- **Notes**:  
+  - Returns the % probability of a stroke.  
+
+---
+
+### 5. Image Classification
+
+- **URL**: `POST /upload-image/`  
+- **Body (form-data)**:  
+  - `file`: image (`.png`, `.jpg`, etc.)  
+- **Response (JSON)**  
+  ```json
+  { "prediction": "Stroke" }
+  ```
+
+---
+
+### 6. Super-Resolution (SRGAN)
+
+- **URL**: `POST /predict/srgan/`  
+- **Body (form-data)**:  
+  - `file`: image  
+- **Response**: PNG image (media_type=`image/png`)  
+
+---
+
+### 7. Image Denoising
+
+- **URL**: `POST /predict/denoising/`  
+- **Body (form-data)**:  
+  - `file`: image  
+- **Response**: PNG image (media_type=`image/png`)  
+
+---
+
+### 8. Style Transfer (CycleGAN)
+
+- **URL**: `POST /predict/cyclegan/`  
+- **Body (form-data)**:  
+  - `file`: image  
+- **Response**: PNG image (media_type=`image/png`)  
+
+---
+
+## Testing with Postman
+
+1. **Start a chat session**  
+   - `POST /chat/stream` → follow SSE stream  
+2. **Upload a PDF**  
+   - `POST /pdf/upload` → confirm `analysis` in JSON  
+3. **Chat with PDF context**  
+   - `POST /chat/stream` again with same `session_id`  
+4. **Retrieve history**  
+   - `GET /chat_history?session_id=...`  
+5. **Stroke prediction & image endpoints**  
+   - Use their respective `POST` endpoints with JSON or form-data.  
+
