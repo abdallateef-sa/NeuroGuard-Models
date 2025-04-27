@@ -24,6 +24,7 @@ os.makedirs("models", exist_ok=True)
 
 app = FastAPI()
 
+
 stroke_model_path = hf_hub_download(repo_id="abdallateef/test", filename="stroke_prediction_pipeline_optimized.joblib")
 detection_model_path = hf_hub_download(repo_id="abdallateef/test", filename="detection_model.h5")
 srgan_model_path = hf_hub_download(repo_id="abdallateef/test", filename="srgan_model.pth")
