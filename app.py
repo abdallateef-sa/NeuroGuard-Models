@@ -70,7 +70,11 @@ async def predict_image(file: UploadFile = File(...)):
         pred = image_model.predict(image)
         pred_label = 1 if pred >= 0.50 else 0
         classes = ['Normal', 'Stroke']
-        return {"prediction": classes[pred_label]}
+        prediction = classes[pred_label]
+        if prediction == 'Stroke':
+            return {"prediction": prediction, "Instructions": "Please go to the hospital immediately for emergency treatment"}
+        else:
+            return {"prediction": prediction}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -286,9 +290,11 @@ def predict(data: PatientData):
     
     # Return the result as a JSON response
     stroke_prob = round(probabilities[1] * 100, 1)
-    return {
-        "stroke_probability": stroke_prob
-    }
+    if stroke_prob > 50:
+        return {"stroke_probability": stroke_prob, "Instructions": "Please go to the hospital immediately for emergency treatment"}
+    else:
+        return {"stroke_probability": stroke_prob, "Instructions": "You are safe, but please take care of your health"}
+
 # Welcome endpoint
 @app.get("/")
 def read_root():
