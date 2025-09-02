@@ -13,6 +13,8 @@ This is a FastAPI-based application that combines:
 
 Use this README to set up, run, and test all API endpoints (e.g. via Postman).
 
+👉 [Models On Hugging Face](https://huggingface.co/abdallateef/test). 
+
 ---
 
 ## Prerequisites
